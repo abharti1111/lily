@@ -1,0 +1,52 @@
+version: '3.8'
+services:
+  db:
+    container_name: database
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_DATABASE: lily
+      MYSQL_ROOT_PASSWORD: abcd
+#    volumes:
+#      - ./pizza_dump.sql/:/docker-entrypoint-initdb.d
+#    command: ["--init-file", "/docker-entrypoint-initdb.d/pizza_dump_file.sql"]
+    ports:
+      - "3306:3306"
+
+  redis:
+    container_name: redis
+    image: redis:5.0.3-alpine
+    restart: always
+    command: ["redis-server", "--protected-mode", "no"]
+    ports:
+      - "6379:6379"
+
+  celery:
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app  # Mount your Django project directory into the container
+    working_dir: /app  # Set the working directory to your Django project
+#    command: bash -c "sleep 10 && celery -A PizzaOrderSystem worker -l info"
+    environment:
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+
+
+  api:
+    container_name: lily
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      bash -c "sleep 10 &&
+#               python manage.py runserver 0.0.0.0:8000 --settings=PizzaOrderSystem.settings"
+    ports:
+      - '8080:8000'
+    depends_on:
+      - db
+      - redis
