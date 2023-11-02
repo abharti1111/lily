@@ -1,52 +1,90 @@
-version: '3.8'
+version: '1.0'
+
 services:
-  db:
-    container_name: database
-    image: mysql:8
-    restart: always
-    environment:
-      MYSQL_DATABASE: lily
-      MYSQL_ROOT_PASSWORD: abcd
-#    volumes:
-#      - ./pizza_dump.sql/:/docker-entrypoint-initdb.d
-#    command: ["--init-file", "/docker-entrypoint-initdb.d/pizza_dump_file.sql"]
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Provide the actual Dockerfile name for your Django project
+    command: bash -c "ls -altr && python manage.py runserver"
     ports:
-      - "3306:3306"
+      - "8000:8000"  # Adjust the port as needed
+    depends_on:
+      - scylladb
+      - redis
+      - redpanda
+      - celery
+      - mysql
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  scylladb:
+    image: scylladb/scylla
+    ports:
+      - "9042:9042"  # CQL port for ScyllaDB
+    environment:
+      - SCYLLA_CONF=/etc/scylla/scylla.yaml
+      # Add any additional ScyllaDB configurations here
+    healthcheck:
+      test: ["CMD", "nodetool", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   redis:
-    container_name: redis
-    image: redis:5.0.3-alpine
-    restart: always
-    command: ["redis-server", "--protected-mode", "no"]
+    image: redis
     ports:
-      - "6379:6379"
+      - "6379:6379"  # Redis default port
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redpanda:
+    image: vectorized/redpanda
+    ports:
+      - "9092:9092"  # Redpanda default port
+    healthcheck:
+      test: ["CMD", "redpanda-broker", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   celery:
-    restart: always
+    image: celery
+    # Add the necessary configurations for the Celery service
     build:
       context: .
       dockerfile: Dockerfile
-    volumes:
-      - .:/app  # Mount your Django project directory into the container
-    working_dir: /app  # Set the working directory to your Django project
-#    command: bash -c "sleep 10 && celery -A PizzaOrderSystem worker -l info"
+    command: bash -c "sleep 10" #&& celery -A Lily worker -l info"
     environment:
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
     depends_on:
-      - redis
+      - redis  # Adding Redis as a dependency for Celery
 
+    healthcheck:
+      test: ["CMD", "celery", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  api:
-    container_name: lily
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: >
-      bash -c "sleep 10 &&
-#               python manage.py runserver 0.0.0.0:8000 --settings=PizzaOrderSystem.settings"
+  mysql:
+    image: mysql
     ports:
-      - '8080:8000'
-    depends_on:
-      - db
-      - redis
+      - "3306:3306"  # MySQL default port
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: example_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

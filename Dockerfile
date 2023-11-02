@@ -20,7 +20,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Copy the rest of the application code
-COPY .. .
+COPY . .
 
 # Expose the port that Django's development server runs on (if applicable)
 EXPOSE 8000
